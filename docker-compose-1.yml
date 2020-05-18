@@ -1,0 +1,8 @@
+version: '3'
+services:
+  web:
+    image: "ubuntu:latest"
+    command: /bin/bash
+  redis:
+    image: "redis:alpine"
+    command: /bin/sh  

@@ -1,0 +1,1612 @@
+Kubernetes Udemy Practice Notes:
+********************************
+Udemy course: https://www.udemy.com/learn-devops-the-complete-kubernetes-course/?couponCode=KUBERNETES_GIT
+github: https://github.com/sduggisetty/kubernetes-course  
+minicube: https://github.com/kubernetes/minikube
+kubernetes.io
+https://medium.com/containermind/how-to-create-a-kubernetes-cluster-on-aws-in-few-minutes-89dda10354f4
+
+what is Kubernetes (k8s)?
+    - Open source orchastration system for Docker containers.
+    - It lets you schedule container on a cluster of machines
+    - You can run long running services (like web apps)
+    - Kubernets will manage the state of thse containers
+        ~ Can start the cotnaier on specific nodes
+        ~ Will restart a container when it gets killed
+        ~ Can move containers from one node to another node. (helps for maintenance of nodes.)
+    - K8s cluster can start with one node until thousands of nodes.
+    - Some of the other orchastration tools:
+        ~ Docker swarm - inbuilt feature in docker.
+        ~ Mesos
+    - You can run k8s anywhere - cloud, private, onpremise, hybrid cloud.
+    - Open source, so if you want you can make changes on ur own.
+    - Backed by Google.
+
+What is Minikube?
+    - Minikube is a tool that makes it easy to run kubernetes locally.
+    - It runs a single-node kuberntes cluster inside a Linux VM.
+    - It's amied on users who want to just test it out or use it for development
+    - It can't spin up a production cluster, it's a one node machine with no high availability.
+    - It works windows, linu, Macod
+    - You need virtualization softwared in ur machine & virtualization has to be enabled in BIOS.
+What is KOPS?
+    - KOPS - kubernetes Operations
+    - To setup kubernetes on AWS, you can use a tools called KOPS
+    - This allows ur to do prodcution grade kubernetes installations, upgrades & management.
+    - kube-up.sh <-- this is a legacy 
+    - KOPS only works on Mac/Linux.
+
+KOPS installation in AWS::
+**************************
+1. Launch one Ubuntu instance and execute below steps to install kops.
+
+2. kops binary download
+curl -LO https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
+chmod +x kops-linux-amd64
+sudo mv kops-linux-amd64 /usr/local/bin/kops
+
+3. aws cli setup to enable ubuntu to interact with aws.
+apt-get update
+apt-get install python-pip --< this is required for aws cli.
+pip install awscli
+
+root@ip-172-31-94-144:~# aws --version
+aws-cli/1.15.71 Python/2.7.12 Linux/4.4.0-1061-aws botocore/1.10.70
+
+
+aws configure
+    AKIAIYRF5MOWEOGLYNHA
+    JAJl9dJg+Pa/rCepswk0Gb+8FLULTA7Fd5umh4zy
+    us-east-1
+    None
+
+
+4. kubectl installation (K8s cli)
+root@ip-172-31-94-144:~# snap install kubectl --classic
+    kubectl 1.11.1 from 'canonical' installed
+root@ip-172-31-94-144:~# kubectl version
+root@ip-172-31-94-144:~# ssh-keygen -f .ssh/id_rsa
+
+5. Create a s3 bucket to integrate this with kubernetes for storing deployments, configs..etc
+create bucket:
+Amazon S3 > kops-state-subbu-bucket
+
+6. Environment variables setup
+updated these two vars in .bashrc & .profile in ~ dir.
+export KOPS_CLUSTER_NAME=subbu.k8s.local
+export KOPS_STATE_STORE=s3://kops-state-subbu-bucket
+
+7. Create cluster:: <-- This will actually prepare the configuration files.
+kops create cluster \
+--node-count=1 \
+--node-size=t2.micro \
+--master-size=t2.micro \
+--zones=us-east-1a \
+--name=${KOPS_CLUSTER_NAME}
+
+if you wanted to review & edit the cluster configuration:
+kops edit cluster --name ${KOPS_CLUSTER_NAME}
+
+if you're okay with the configuration run the command with --yes as like below:
+kops update cluster --name ${KOPS_CLUSTER_NAME} --yes
+
+    Cluster is starting.  It should be ready in a few minutes.
+
+    Suggestions:
+    * validate cluster: kops validate cluster
+    * list nodes: kubectl get nodes --show-labels
+    * ssh to the master: ssh -i ~/.ssh/id_rsa admin@api.subbu.k8s.local
+    * the admin user is specific to Debian. If not using Debian please use the appropriate user based on your OS.
+    * read about installing addons at: https://github.com/kubernetes/kops/blob/master/docs/addons.md.
+
+To validate the cluster::
+root@ip-172-31-94-144:~# kops validate cluster
+    Validating cluster subbu.k8s.local
+
+    INSTANCE GROUPS
+    NAME                    ROLE    MACHINETYPE     MIN     MAX     SUBNETS
+    master-us-east-1a       Master  m3.medium       1       1       us-east-1a
+    nodes                   Node    t2.medium       1       1       us-east-1a
+
+    NODE STATUS
+    NAME                            ROLE    READY
+    ip-172-20-52-91.ec2.internal    node    True
+    ip-172-20-54-252.ec2.internal   master  True
+
+    Your cluster subbu.k8s.local is ready
+
+8. deploying dashboard feature::
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+
+Edit master's security group:
+-> Make sure 443 port is allowed from ANYWHERE in aws security group.
+
+To get admin user's password::
+root@ip-172-31-94-144:~# kops get secrets kube --type secret -oplaintext Or  grep password: ~/.kube/config 
+f5yE11ypMRi2KTU9Z8oy0KfI9taWPwkC
+
+
+Launch kubernetes url:
+http://<master dns>/ui 
+    admin
+    <passwrod>
+
+--> Select the token option and paste the below one.
+
+Token generation for admin:
+root@ip-172-31-94-144:~# kops get secrets admin --type secret -oplaintext
+qvOyWJp30afqk5BBcKIqm5nU50hh0MPh
+
+
+root@ip-172-31-94-144:~# kubectl cluster-info
+    Kubernetes master is running at https://api-subbu-k8s-local-df1a7n-1016419148.us-east-1.elb.amazonaws.com
+    KubeDNS is running at https://api-subbu-k8s-local-df1a7n-1016419148.us-east-1.elb.amazonaws.com/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+
+    To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+
+root@ip-172-31-94-144:~# kubectl get nodes <-- To get the nodes status 
+NAME                            STATUS    ROLES     AGE       VERSION
+ip-172-20-59-100.ec2.internal   Ready     node      8m        v1.9.8
+ip-172-20-63-182.ec2.internal   Ready     master    9m        v1.9.8
+
+
+Deploy hello-minicube to validate::
+root@ip-172-31-94-144:~# kubectl run hello-minikube --image=gcr.io/google_containers/echoserver:1.4 --port=8080
+deployment.apps/hello-minikube created
+root@ip-172-31-94-144:~# kubectl expose deployment hello-minikube --type=NodePort
+service/hello-minikube exposed
+
+kubectl get service
+
+
+For deleting KOPS cluster:: (At the end if you want to delete)
+kops delete cluster --name ${KOPS_CLUSTER_NAME} --< check all the resources
+kops delete cluster --name ${KOPS_CLUSTER_NAME} --yes
+
+install docker in ubuntu:
+ $ curl -fsSL get.docker.com -o get-docker.sh
+ $ sh get-docker.sh
+
+docker info
+
+custom image:
+FROM node:4.6
+WORKDIR /app
+ADD ./app
+RUN npm install
+EXPOSE 3000
+CMD npm start
+
+--------------------------
+How to install virtualbox in uubuntu?
+Ref link: https://linuxhint.com/install-minikube-ubuntu/
+apt-get update
+sudo apt-get install curl
+sudo apt-get install virtualbox virtualbox-ext-pack
+press tab -> enter -> yes 
+-----------------------
+
+Firstapp deploy in Kubernetes::
+1. Makesure your images is ready and pushed to docker hub.
+2. create yml file script to deploy into K8s.
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# cat helloworld.yml
+        apiVersion: v1
+        kind: Pod
+        metadata:
+        name: nodehelloworld.example.com
+        labels:
+            app: helloworld
+        spec:
+        containers:
+        - name: k8s-demo
+            image: wardviaene/k8s-demo
+            ports:
+            - name: nodejs-port
+            containerPort: 3000
+3. Run 
+    kubectl create -f ubernetes-course/first-app/helloworld.yml
+
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# cat helloworld.yml
+        apiVersion: v1
+        kind: Pod
+        metadata:
+        name: nodehelloworld.example.com
+        labels:
+            app: helloworld
+        spec:
+        containers:
+        - name: k8s-demo
+            image: wardviaene/k8s-demo
+            ports:
+            - name: nodejs-port
+            containerPort: 3000
+
+4. To get Pods list
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# kubectl get pod
+    NAME                              READY     STATUS              RESTARTS   AGE
+    hello-minikube-64698d6ccf-57wsr   1/1       Running             0          15m
+    hello-minikube-64698d6ccf-pf6ks   1/1       Running             0          15m
+    nodehelloworld.example.com        0/1       ContainerCreating   0          26s
+5. To get more detial about pod -- here you can see containers, status, volumes, ports, conditions, Events, Lables, Ips, image, status..etc
+    kubectl pod describe nodehelloworld.example.com (pod name)
+One waty to test:
+6. Forward port
+    kubectl port-forward nodehelloworld.example.com 8081:3000
+
+7. Open duplicate session
+    ubuntu@ip-172-31-94-144:~$ curl localhost:8081
+        Hello World!
+        ubuntu@ip-172-31-94-144:~$
+Second way : Expose pod & port
+8. Create a service using expose command 
+    kubectl expose pod nodehelloworld.example.com --type=NodePort --name node-helloworld-service
+
+9. Get servcies list <-- The IPs are displyed below are within the cluser not for exposing to the world.
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# kubectl get service
+        NAME                      TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+        hello-minikube            NodePort    100.68.69.252    <none>        8080:30974/TCP   18h
+        kubernetes                ClusterIP   100.64.0.1       <none>        443/TCP          18h
+        node-helloworld-service   NodePort    100.65.253.154   <none>        3000:31821/TCP   1m     <-- 31821 is node port for this service
+        nodehelloworld-service    NodePort    100.68.192.18    <none>        3000:30676/TCP   16h    <-- 30676
+
+10. To launch the url:
+    http://<cluster-master>:node-port/  Or http://<cluster-node>:node-port/ 
+
+------------------------------------------------------
+Useful Kubectl commands::
+kubectl attach nodehelloworld.example.com <-- Jus to see running logs of container / get output from running container..etc
+kubectl exec nodehelloworld.example.com -- ls /app  <-- exec some cmmand in running container
+kubectl exec nodehelloworld.example.com -- touch /app/test
+kubectl get service <-- 
+kubectl describe service S'name
+    $ kubectl describe service nodehelloworld-service
+    Name:                     nodehelloworld-service
+    Namespace:                default
+    Labels:                   app=helloworld
+    Annotations:              <none>
+    Selector:                 app=helloworld
+    Type:                     NodePort
+    IP:                       100.68.192.18 <-- cluster IP for this service
+    Port:                     <unset>  3000/TCP <-- container running port
+    TargetPort:               3000/TCP
+    NodePort:                 <unset>  30676/TCP <-- exposed port 
+    Endpoints:                100.96.1.7:3000 <-- This is for other container to connect within the cluster.
+    Session Affinity:         None
+    External Traffic Policy:  Cluster
+    Events:                   <none>
+kubectl describe service nodehelloworld-service | grep NodePort <-- To get nodeport of service.
+Type:                     NodePort
+NodePort:                 <unset>  30676/TCP
+
+-----------------------------------------------
+How to setup load balancer for our application running in kubernetes::
+    Traffic --> DNS --> AWS LB --> Cluster IP:port
+    Or
+    Traffic --> DNS --> haproxy/nginx --> Cluster IP:port
+
+--> Here for doing this, we create a yml file for our service instead of expose we are creating yml file for exposing ports. It will automatically create AWS LB.
+
+
+first-app$ cat helloworld-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloworld-service
+spec:
+  ports:
+  - port: 80
+    targetPort: nodejs-port   <-- kubernetes do look for this container's port, which we ran in before excercise.
+    protocol: TCP
+  selector:
+    app: helloworld <-- label of the app to identify application.
+  type: LoadBalancer
+
+
+--> root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# kubectl create -f helloworld-service.yml 
+service/helloworld-service created <-- This step takes ltl bit time as it needs to create aws elb..etc.
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course/first-app# kubectl get service <-- see TYPE & External-IP 
+NAME                      TYPE           CLUSTER-IP       EXTERNAL-IP        PORT(S)          AGE
+hello-minikube            NodePort       100.68.69.252    <none>             8080:30974/TCP   19h
+helloworld-service        LoadBalancer   100.70.113.158   acd55c8bf989a...   80:31187/TCP     2m
+
+--> see the aws ELB now & launch it. you should be able to see the output. Here you can also explore healtheck of LB, nodes list, listing ports..etc
+    http://acd55c8bf989a11e8a8910e0f0f7ca93-302023486.us-east-1.elb.amazonaws.com/
+
+--> If needed, you can configure Route53 DNS and setup to connect DNS with ELB, so that you will be able to launch the application using ur DNS names.
+
+--> you can also identify a security group which gets created for our ELB. Explore it to restict inbound/outbound ports for ur ELB.
+        SG'id -- Security group for Kubernetes ELB acd55c8bf989a11e  
+
+If needed To delete the service:
+kubectl get service
+kubectl delete service node-helloworld-service
+service "node-helloworld-service" deleted
+
+===============================================================================================================================
+Kubernetes Basics::
+
+Node Architecture: see Node Architecture.jpg
+
+Scaling Pods:
+
+If the application is "stateless" you can horizantally scale it.
+    - Stateless -- applicaiton doesn't have a state, it doens't write any local files / keeps local sessions.
+    -  All traditional databases (Mysql, Postgres) are statuful, they have database files that can't be split over multiple instances.
+    -Most of web applicaitons can be stateless.
+        ~ Session management needs to be done outside the container 
+        ~ Session management needs to be done outside container.(redis db, memcache or even other db)
+        ~ Any file needs to be saved, can't be saved locally on container.
+    - Stateful applicaitons should use volumes to maintain persistant data.
+        ~ Stateful apps can't horizontally scale, but you can run them in a single container and vertically scale (allocate more CPU / Memory / Disk)
+Scaling:
+    - Scaling in Kubernetes can be done using the Replication Controller.
+    - The replicaiton controller will ensure a specified number of pod replicas will run at all time.
+    - A pods created with the replica controller will automatically be replaced if they fail, get deleted, or are terminated.
+    - Using the replication controller is also recommended if you just want to make sure 1 pod is always running, even after reboots.
+        ~ You can then run a replication controller with just 1 replica
+        ~ Thsi make sure that pod is alwasy running
+
+Note:: Declaring replics count in yml file is not mandatory, you can also scaleup/down even latter. if you mention in yml, one advantage is file would be versioned so that automcatlly gets created no.of pods everytime.
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course/replication-controller# cat helloworld-repl-controller.yml
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: helloworld-controller
+spec:
+  replicas: 2
+  selector:
+    app: helloworld
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+
+Demo:
+root@ip-172-31-94-144:~/subbu/kubernetes-course/replication-controller# kubectl create -f helloworld-repl-controller.yml
+replicationcontroller/helloworld-controller created
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course/replication-controller# kubectl get pod <-- horizantally Scaling
+NAME                          READY     STATUS    RESTARTS   AGE
+helloworld-controller-fzbp4   1/1       Running   0          57s
+helloworld-controller-qf8xn   1/1       Running   0          4m
+
+
+kubectl describe pod helloworld-controller-fzbp4
+
+Even if you delete anyone pod, replication controller will automatically create new pod:
+
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/replication-controller# kubectl delete pod helloworld-controller-fzbp4
+    pod "helloworld-controller-fzbp4" deleted
+
+    root@ip-172-31-94-144:~/subbu/kubernetes-course/replication-controller# kubectl get pod
+    NAME                          READY     STATUS    RESTARTS   AGE
+    helloworld-controller-qf8xn   1/1       Running   0          6m
+    helloworld-controller-rlg5n   1/1       Running   0          35s
+
+To scale up:
+kubectl scale --replicas=3 -f helloworld-repl-controller.yml <-- einter yml file or rc/replica-name.
+replicationcontroller/helloworld-controller scaled
+
+kubectl get pod <-- 3 pods will be running.
+
+kubectl get rc <-- to get list of replication controllers.
+NAME                    DESIRED   CURRENT   READY     AGE
+helloworld-controller   3         3         3         19m
+
+To scale Down:
+kubectl scale --replicas=1 rc/helloworld-controller <-- einter yml file or rc/replica-name.
+replicationcontroller/helloworld-controller scaled
+
+To delte rc:
+kubectl delete rc/helloworld-controller
+replicationcontroller "helloworld-controller" deleted
+
+----------------------------------------------------------------
+Deployments::
+
+Replication Set is the next-generation replication controller.
+
+- It supports a new selector that can do selection based on filtering according a set of values.
+    eg: "Environment" either "dev" or "qa"
+- not only based on equality, like the replicaiton controller
+    eg: "environment" == "dev"
+- This Replica Set, rather than the Replication Controller, is used by the deployment object.
+
+Deployments:
+- A deployment delcaration in kubernetes allows you to do app deployment and udpates.
+- When using the deployment object, you define the state of your appliction.
+    ~ Kubernetes will then make sure the clusters matches your desired state.
+- Just using the replicaiton controller or replicaiton set might be cumbersome to deploy apps.
+    ~ The Deployment Object is easier to use and give you more possibilities.
+- with the deployment object you can:
+    # Create a deployment (eg: deploying an app)
+    # Update a deployment (eg: deploying a new verison)
+    # Do rolling udpates (Zero downtime deployments)
+    # Roll back to previous version
+    # Pause / Resume a deployment (eg: to roll-out to only a certain percentage)
+
+command                                     Description
+----------                                  -----------
+kubectl get dpeloyments                     Get information on current deployments
+kubectl get rs                              Get information about the replica sets 
+kubectl get pods --show-labels              get pods, and also show lables attached to those pods 
+kubectl rollout status deloyment/helloworld-deployment  Get deployment status 
+kubectl set image deploymnet/helloworld-deployment k8s-demo=k8s-demo:2      Run k8s-demo with the image label version 2.
+kubectl edit deploymnet/helltheoworld-deployment               Edit the deployment object.
+kubectl rollout status deploymnet/helltheoworld-deployment      Get the status of the rollout 
+kubectl rollout history deploymnet/helltheoworld-deployment     Get the rollout history
+kubectl rollout undo deploymnet/helltheoworld-deployment        Rollback to previous version
+kubectl rollout undo deploymnet/helltheoworld-deployment --to-version=n     Rollback to any version.
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# cat  deployment/helloworld.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl create -f deployment/helloworld.yml
+deployment.extensions/helloworld-deployment created
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl get deployments
+NAME                    DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+helloworld-deployment   3         3         3            3           1m
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl get pod
+NAME                                     READY     STATUS    RESTARTS   AGE
+helloworld-deployment-64b4c45585-2rsgt   1/1       Running   0          2m
+helloworld-deployment-64b4c45585-79g5z   1/1       Running   0          2m
+helloworld-deployment-64b4c45585-gvvcp   1/1       Running   0          2m
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl get rs
+NAME                               DESIRED   CURRENT   READY     AGE
+helloworld-deployment-64b4c45585   3         3         3         3m
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl get pod --show-labels
+NAME                                     READY     STATUS    RESTARTS   AGE       LABELS
+helloworld-deployment-64b4c45585-2rsgt   1/1       Running   0          3m        app=helloworld,pod-template-hash=2060701141
+helloworld-deployment-64b4c45585-79g5z   1/1       Running   0          3m        app=helloworld,pod-template-hash=2060701141
+helloworld-deployment-64b4c45585-gvvcp   1/1       Running   0          3m        app=helloworld,pod-template-hash=2060701141
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl rollout status deployment/helloworld-deployment
+deployment "helloworld-deployment" successfully rolled out
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl expose deployment helloworld-deployment --type=NodePort
+service/helloworld-deployment exposed
+
+root@ip-172-31-94-144:~/subbu/kubernetes-course# kubectl get service
+NAME                     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+hello-minikube           NodePort    100.68.69.252   <none>        8080:30974/TCP   22h
+helloworld-deployment    NodePort    100.64.58.4     <none>        3000:30192/TCP   46s
+
+kubectl describe service helloworld-deployment 
+
+http://ec2-34-238-169-206.compute-1.amazonaws.com:30192/
+ O/P: Hello World!
+
+root@ip-172-31-94-144:~# kubectl set image deployment/helloworld-deployment k8s-demo=wardviaene/k8s-demo:2
+deployment.extensions/helloworld-deployment image updated
+
+root@ip-172-31-94-144:~# kubectl rollout status deployment/helloworld-deployment
+    Waiting for deployment "helloworld-deployment" rollout to finish: 1 old replicas are pending termination...
+    Waiting for deployment "helloworld-deployment" rollout to finish: 2 of 3 updated replicas are available...
+    deployment "helloworld-deployment" successfully rolled out
+
+
+http://ec2-34-238-169-206.compute-1.amazonaws.com:30192/
+ O/P: Hello World v2!
+
+root@ip-172-31-94-144:~# kubectl rollout history deployment/helloworld-deployment
+deployments "helloworld-deployment"
+REVISION  CHANGE-CAUSE
+1         <none> <-- while creating deploy if you could you have used --record "deploy1" like this, this would have displyed the recorded name.
+2         <none>
+
+Rollback to previous version:
+root@ip-172-31-94-144:~# kubectl rollout undo deployment/helloworld-deployment
+deployment.extensions/helloworld-deployment
+
+kubectl rollout status deployment/helloworld-deployment
+
+http://ec2-34-238-169-206.compute-1.amazonaws.com:30192/
+ O/P: Hello World!
+
+
+root@ip-172-31-94-144:~# kubectl rollout history deployment/helloworld-deployment
+deployments "helloworld-deployment"
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+
+
+kubectl edit deployment/helloworld-deployment
+    spec:
+    replicas: 2
+    revisionHistoryLimit: 100
+:wq
+
+root@ip-172-31-94-144:~# kubectl get pod <-- only 2 are running now.
+NAME                                     READY     STATUS    RESTARTS   AGE
+helloworld-deployment-64b4c45585-b9b82   1/1       Running   0          9m
+helloworld-deployment-64b4c45585-wwpm7   1/1       Running   0          9m
+
+And also now you can see it is storing more history of deployments:
+root@ip-172-31-94-144:~# kubectl rollout history deployment/helloworld-deployment
+    deployments "helloworld-deployment"
+    REVISION  CHANGE-CAUSE
+    3         <none>
+    7         <none>
+    8         <none>
+
+To rollback to specific revision:
+root@ip-172-31-94-144:~# kubectl rollout undo deployment/helloworld-deployment --to-revision=7
+deployment.extensions/helloworld-deployment
+
+To delete deployment:
+root@ip-172-31-94-144:~# kubectl delete deployment/helloworld-deployment
+deployment.extensions "helloworld-deployment" deleted
+--------------------------------------
+Services::
+- Pods are very dynamic, they come and go on the kubernetes cluseter.
+    ~ When using a "Replicaiton Controller", pods are terminated and created during scaling operations.
+    ~ When using Deployment, when updating the image version, pods are terminated and new pods take the place of older pods.
+    ~ That's why Pods should never be accessed directly, but always through a Service.
+    ~ A service is the logical bridge between the "mortal" pods and other service or end-users.
+- Wehn using the "kubectl expose" command earlier, you created a new service for your pod, so it could be accessed externally
+    ~ a ClusterIP: a virtul IP address only reachable from within the cluster (this is the default)
+    ~ a NodePort: a port that is the same on each node that is also reachable externally
+    ~ a LoadBalancer: a LoadBalancer created by the cloud provider that will route external traffic to every node on the NodePort (ELB on AWS)
+- There is also posibility to use DNS names
+    ~ ExternalName can provide a DNS name for the service
+        eg: for service deisovery using DNS
+    ~ This only works when the DNS add-on is enabled.
+- By default service can only run between ports 30000-32767, but you could change this behaviour by adding the --serice-node-port-range= argument to the kube-apiservice (in the init scripts)
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course# cat first-app/helloworld.yml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nodehelloworld.example.com
+  labels:
+    app: helloworld
+spec:
+  containers:
+  - name: k8s-demo
+    image: wardviaene/k8s-demo
+    ports:
+    - name: nodejs-port   <-- node-js port name
+      containerPort: 3000
+
+
+
+first-app/helloworld-nodeport-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloworld-service
+spec:
+  ports:
+  - port: 31001
+    nodePort: 31001
+    targetPort: nodejs-port  <-- Targetting node-js port (Name of port)
+    protocol: TCP
+  selector:
+    app: helloworld
+  type: NodePort
+
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kubectl create -f helloworld-nodeport-service.yml
+service/helloworld-service created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kubectl get service
+NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)           AGE
+helloworld-service   NodePort    100.64.55.90   <none>        31001:31001/TCP   8s    <-- See the port here, it has used the given port in yml.
+
+http://ec2-52-4-121-161.compute-1.amazonaws.com:31001/ --< able to launch.
+
+
+-> svc is short from of service.
+kubectl describe svc or service helloworld-service
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kc describe svc helloworld-service
+Name:                     helloworld-service
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=helloworld
+Type:                     NodePort
+IP:                       100.64.55.90 <-- uses internally within cluster. If you want to make this IP also static, that can be done, just declare it in yml file as like for port.
+Port:                     <unset>  31001/TCP
+TargetPort:               nodejs-port/TCP
+NodePort:                 <unset>  31001/TCP <-- static
+Endpoints:                100.96.1.6:3000
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+
+-> Even if you delete service and recreate service again it will use the same as prefered in service.yml file. This is like we are fixing a port for this service.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kubectl delete service helloworld-service
+service "helloworld-service" deleted
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kubectl create -f helloworld-nodeport-service.yml
+service/helloworld-service created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kc describe svc helloworld-service | grep NodePort
+Type:                     NodePort
+NodePort:                 <unset>  31001/TCP
+
+-----------------------------------------------------
+Labels:: (These are like TAGS in AWS, to identify the resouces) -- helps to group the nodes.
+- Labels are key/value pair that can be attached to objects
+    ~ Lables are like tags in AWS or other cloud providers, used to tag resources
+- You can label your objects, for instance your pod, following an organizational structure
+    ~ Key: environemnt - Value: dev / staging / qa / prod
+    ~ Key: department - Value: engineering / finance / marketing
+In our examples we alredy used it to tag pods:
+metadata:
+  name: nodehelloworld.example.com
+  lables:
+    app: helloworld
+
+- Labels are not unique and multiple lables can be added to one object.
+- Once labels are attached to an object, you can use filters to narrow down results, this is called "Label Selectors"
+- Using Label Selectors, you can use matching expressions to match labels 
+    ~ For instance, a perticular pod can only run on a node labeled with "environemnt" quals "development"
+    ~ More complex matching: "environemnt" in "development" or "qa"
+Node Labels:
+- You can also use lables to tag nodes.
+- Once nodes are tagged, you can use lable selectors to let pods only run on specific nodes.
+- There are 2 steps required to run a pod on a specifc set of nodes:
+    ~ First you tag the node
+        kubectl lable nodes node1 hardware=high-spec
+        kubectl lable nodes node2 hardware=low-spec
+    ~ Then you add a nodeSelector to your pod configuration. (It can be to a single pod or with in deployment configuration)
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# cat helloworld-nodeselector.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+      nodeSelector:
+        hardware: high-spec
+
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/first-app# kc get nodes
+NAME                            STATUS    ROLES     AGE       VERSION
+ip-172-20-39-164.ec2.internal   Ready     master    1h        v1.9.8
+ip-172-20-47-46.ec2.internal    Ready     node      1h        v1.9.8
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get nodes --show-labels <-- before labeling node.
+NAME                            STATUS    ROLES     AGE       VERSION   LABELS
+ip-172-20-39-164.ec2.internal   Ready     master    1h        v1.9.8    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/instance-type=t2.micro,beta.kubernetes.io/os=linux,failure-domain.beta.kubernetes.io/region=us-east-1,failure-domain.beta.kubernetes.io/zone=us-east-1a,kops.k8s.io/instancegroup=master-us-east-1a,kubernetes.io/hostname=ip-172-20-39-164.ec2.internal,kubernetes.io/role=master,node-role.kubernetes.io/master=
+ip-172-20-47-46.ec2.internal    Ready     node      1h        v1.9.8    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/instance-type=t2.micro,beta.kubernetes.io/os=linux,failure-domain.beta.kubernetes.io/region=us-east-1,failure-domain.beta.kubernetes.io/zone=us-east-1a,kops.k8s.io/instancegroup=nodes,kubernetes.io/hostname=ip-172-20-47-46.ec2.internal,kubernetes.io/role=node,node-role.kubernetes.io/node=
+
+- When i am trying to deploy the above yml file without labelling node, it is getitng failed to create pods.
+kc create -f helloworld-nodeselector.yml
+kc get pods
+kc describe pod helloworld-deployment-856dc58fb6-4m2c5
+    Events:
+    Type     Reason            Age                From               Message
+    ----     ------            ----               ----               -------
+    Warning  FailedScheduling  13s (x6 over 28s)  default-scheduler  0/2 nodes are available: 1 PodToleratesNodeTaints, 2 MatchNodeSelector.
+- It is gettin failed because of nodeSelector can't find the node with the name of high-spec label.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kubectl label nodes ip-172-20-47-46.ec2.internal hardware=high-spec
+node/ip-172-20-47-46.ec2.internal labeled
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get nodes --show-labels | grep high-spec
+ip-172-20-47-46.ec2.internal    Ready     node      1h        v1.9.8    beta.kubernetes.io/arch=amd64,beta.kubernetes.io/instance-type=t2.micro,beta.kubernetes.io/os=linux,failure-domain.beta.kubernetes.io/region=us-east-1,failure-domain.beta.kubernetes.io/zone=us-east-1a,hardware=high-spec,kops.k8s.io/instancegroup=nodes,kubernetes.io/hostname=ip-172-20-47-46.ec2.internal,kubernetes.io/role=node,node-role.kubernetes.io/node=
+
+As soon as you labeled, our deployment is able to identify the node and started deploying pods in that node.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get deployment
+NAME                    DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+helloworld-deployment   3         3         3            3           6m
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get pods
+NAME                                     READY     STATUS    RESTARTS   AGE
+helloworld-deployment-856dc58fb6-4m2c5   0/1       Running   0          6m
+helloworld-deployment-856dc58fb6-7gq62   1/1       Running   0          6m
+helloworld-deployment-856dc58fb6-jkqxh   1/1       Running   0          6m
+nodehelloworld.example.com               1/1       Running   0          31m
+
+
+----------------------------------------------------------------------------
+Health Checks:: Heps to ensure pod is healthy or not.
+- If your application malfunctions, the pod and container can still be running, but the application might not work anymore.
+- To detect and resolve problems with your application, you can run health checks.
+- You can run 2 different types of health checks:
+    ~ Running a command in container periodically
+    ~ Pefiodic checks on a URL (HTTP)
+- The typical production app behid a LB should always have health checks implemented in some way to ensure availablity and resiliency of the app.
+
+example:
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# cat helloworld-healthcheck.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+        livenessProbe:
+          httpGet:
+            path: /
+            port: nodejs-port
+          initialDelaySeconds: 15
+          timeoutSeconds: 30
+
+kc create -f helloworld-healthcheck.yml
+kc get pods
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc describe pod helloworld-deployment-bb9c787d5-frfsq | grep Liveness
+    Liveness:     http-get http://:nodejs-port/ delay=15s timeout=30s period=10s #success=1 #failure=3
+
+kc edit deployment helloworld-deployment <-- if you want to edit deployment.
+
+So here after if our application gets crashed or any issue, it will mark that pod as unhealty automatically.
+
+---------------------------------------------------------------------------
+
+Secrets:: 
+- Secrets provide a way in kubernetes to distrubute credentials, keys, passwords or secret data to the pods.
+- Kubernetes itself uses this secrets mechanish to profide the credentials to access the internal API.
+- You can also use the same mechanish to provide secrets to your applicatoin.
+- Secrets is one way to provide secrets, native to kubernetes
+    ~ There are still other way your container can get its secrets if you don't want to use Secrets (e.g: using an external valult service in your app)
+- Secrets can be used in the following ways:
+    * use secrets as environment variables
+    * Use secrets as a file in pod
+        @ This setup uses volumes to be mounted in a container
+        @ In this volume you have files
+        @ Can be used to instance for dotenv files or your app can just read this file
+    * Use an external image to pull secrets (from a private image registry)
+    
+To generate secrets using fiels:
+echo -n "root" > ./username.txt
+echo -n "password" > ./password.txt
+kubectl create secret generic db-user-pass --from-file=./username.txt --from-file=./password.txt
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get secrets
+NAME                  TYPE                                  DATA      AGE
+db-user-pass          Opaque                                2         14s
+default-token-7px8g   kubernetes.io/service-account-token   3         2h
+
+- A secret can also be an SSH key or an SSL certificate
+kubectl create secret generic ssl-certificate --from-file=ssh-privatekey=~/.ssh/id_rsa --ssl-cert=mysslcert.crt
+
+If you want to generate secrets using yaml::
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# echo -n "root" | base64
+cm9vdA==
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# echo -n "password" | base64
+cGFzc3dvcmQ=
+
+secrets-db-secret.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+type: Opaque
+data:
+  username: cm9vdA==
+  password: cGFzc3dvcmQ=
+
+kc crete -f secrets-db-secret.yml
+
+Using secrets::: This pod exposes secrets as environment variables.
+---------------
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+        env:
+        - name: SECRET_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: db-secret
+            key: username
+        - name: SECRET_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: db-secret
+            key: password
+
+Alternatively you can provide secrets in a file:
+...
+...
+    ports:
+    - containerPort: 3000
+    volumeMounts:
+    -name: credvolume
+    mountPath: /etc/creds  <-- The secrets will be store here (/etc/creds/db-secrets/username, /etc/creds/db-secrets/password)
+    readOnly: True
+  volumes:
+  -name: credvolume <-- this one and the above one should be same.
+  secret:
+    secretName: db-secrets
+
+Demo:
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc create -f helloworld-secrets.yml
+secret/db-secrets created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get secrets
+NAME                  TYPE                                  DATA      AGE
+db-secrets            Opaque                                2         7s
+default-token-7px8g   kubernetes.io/service-account-token   3         2h
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# cat helloworld-secrets-volumes.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+        volumeMounts:
+        - name: cred-volume
+          mountPath: /etc/creds
+          readOnly: true
+      volumes:
+      - name: cred-volume
+        secret:
+          secretName: db-secrets
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc create -f helloworld-secrets-volumes.yml
+deployment.extensions/helloworld-deployment created
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc get pods
+NAME                                     READY     STATUS    RESTARTS   AGE
+helloworld-deployment-6cfc6d654f-44st9   1/1       Running   0          3m
+helloworld-deployment-6cfc6d654f-4p4jm   1/1       Running   0          3m
+helloworld-deployment-6cfc6d654f-s76gn   1/1       Running   0          3m
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc describe pod helloworld-deployment-6cfc6d654f-44st9 | grep -A 3 Mounts     Mounts:
+      /etc/creds from cred-volume (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-7px8g (ro)
+
+Validate inside the container whethre the files are avaialable or not::
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc exec -it helloworld-deployment-6cfc6d654f-44st9 cat /etc/creds/username
+root
+root@ip-172-31-88-246:~/subbu/kubernetes-course/deployment# kc exec -it helloworld-deployment-6cfc6d654f-44st9 cat /etc/creds/password
+password
+
+-----------
+wordpress demo:
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# cat wordpress-secrets.yml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wordpress-secrets
+type: Opaque
+data:
+  db-password: cGFzc3dvcmQ=
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# cat wordpress-single-deployment-no-volumes.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: wordpress-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:4-php7.0
+        ports:
+        - name: http-port
+          containerPort: 80
+        env:
+          - name: WORDPRESS_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: wordpress-secrets
+                key: db-password
+          - name: WORDPRESS_DB_HOST
+            value: 127.0.0.1
+      - name: mysql
+        image: mysql:5.7
+        ports:
+        - name: mysql-port
+          containerPort: 3306
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: wordpress-secrets
+                key: db-password
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# cat wordpress-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-service
+spec:
+  ports:
+  - port: 31001
+    nodePort: 31001
+    targetPort: http-port
+    protocol: TCP
+  selector:
+    app: wordpress
+  type: NodePort
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc create -f wordpress-secrets.yml
+secret/wordpress-secrets created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc create -f wordpress-single-deployment-no-volumes.yml
+deployment.extensions/wordpress-deployment created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc get pods  <-- two container in one pod
+NAME                                    READY     STATUS    RESTARTS   AGE
+wordpress-deployment-55c58c7d57-tcjh2   2/2       Running   0          57s
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc describe pod wordpress-deployment-55c58c7d57-tcjh2 | grep -i ROOT
+      MYSQL_ROOT_PASSWORD:  <set to the key 'db-password' in secret 'wordpress-secrets'>  Optional: false
+
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc create -f wordpress-service.yml
+service/wordpress-service created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc get service
+NAME                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)           AGE
+kubernetes          ClusterIP   100.64.0.1       <none>        443/TCP           3h
+wordpress-service   NodePort    100.69.107.230   <none>        31001:31001/TCP   5s
+
+After creating service, i am able to access the application outside.
+http://ec2-52-4-121-161.compute-1.amazonaws.com:31001/wp-admin/install.php
+
+-able to signup and signin as well.
+
+--> If you delete the pod, our deployment will automatically launch a new pod. since we were not suing volumes in the containers, it will flush the whole data and it looks like a new setup right from the start.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc delete pod wordpress-deployment-55c58c7d57-tcjh2
+pod "wordpress-deployment-55c58c7d57-tcjh2" deleted
+root@ip-172-31-88-246:~/subbu/kubernetes-course/wordpress# kc get pod
+NAME                                    READY     STATUS    RESTARTS   AGE
+wordpress-deployment-55c58c7d57-zk628   2/2       Running   0          2m <-- new pod id gets created.
+
+Now if you launch the same url gain, it will ask for again installation..it losts old user/pwd details. bcz its not persistant.
+http://ec2-52-4-121-161.compute-1.amazonaws.com:31001/wp-admin/install.php
+
+-----------------
+WebUI::
+https://master-ip/ui
+
+K8s comes with Web Ui you can use instead of the kubectl commands.
+You can use it to:
+    ~ Get an overview of running applicaitons on your cluster
+    ~ Creating and modifying individual kubernetes resources and  workloads (like kubectl create and delete)
+    ~ Retrive information on the state of the resources (like kubectl desribe pod)
+
+For Kops: you can see the dashboard install steps in kubernetes installation part.
+
+For minikube.
+minikube dashboard
+minikube dashboard --url
+
+if you don't like to use kubectl, you feel free to use webUI as it is very userfriendly.
+but kubectl helps you to automate in scripts. 
+==========================================================================================
+DNS::
+- DNS is a buit-in service launched automatically using the addon manager. (>V1.3)
+   ~The addons are in the /etc/kubernetes/addons dir on master node.
+- The DNS service can be used within pods to find other services running on the same cluster.
+- Multi containers within 1 pod don't need this service, as they can contact eachother directly.
+  ~ A container in the same pod can connect the port of the other container dicrectly using localhost:port
+- To make DNS work, a pod will need a service definetion.
+
+    Pod1                    Pod2
+  Container                Container
+  Service: app1           Service: app2
+  IP: 10.0.0.1            IP: 10.0.0.2
+
+IF app1 want to connects with app2:
+$host app1-service <-- with in same pod
+app-1-serivce has address 10.0.0.1
+$host app2-service <-- if both are same NAMESPACE
+app2-service has address 10.0.0.2
+$host app2-service.default <-- If both are in diff name NAMESPACE.
+app2-service.default has address 10.0.0.2
+$host app2-service.default.svc.cluster.local <-- If both are running diff clusters within host.
+app2-service.default.svc.cluster.local has address 10.0.0.2
+
+Demo:
+root@ip-172-31-88-246:~/subbu/kubernetes-course# kubectl  create  -f service-discovery/secrets.yml
+secret/helloworld-secrets created
+
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# cat database.yml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: database
+  labels:
+    app: database
+spec:
+  containers:
+  - name: mysql
+    image: mysql:5.7
+    ports:
+    - name: mysql-port
+      containerPort: 3306
+    env:
+      - name: MYSQL_ROOT_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: helloworld-secrets
+            key: rootPassword
+      - name: MYSQL_USER
+        valueFrom:
+          secretKeyRef:
+            name: helloworld-secrets
+            key: username
+      - name: MYSQL_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: helloworld-secrets
+            key: password
+      - name: MYSQL_DATABASE
+        valueFrom:
+          secretKeyRef:
+            name: helloworld-secrets
+            key: database
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# cat database-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service <-- service name for db 
+spec:
+  ports:
+  - port: 3306
+    protocol: TCP
+  selector:
+    app: database
+  type: NodePort
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# cat helloworld-db.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: helloworld-db
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        command: ["node", "index-db.js"]
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+        env:
+          - name: MYSQL_HOST
+            value: database-service <-- database service name.
+          - name: MYSQL_USER
+            value: root
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: helloworld-secrets
+                key: rootPassword
+          - name: MYSQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: helloworld-secrets
+                key: database
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# cat helloworld-db-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloworld-db-service
+spec:
+  ports:
+  - port: 3000
+    protocol: TCP
+  selector:
+    app: helloworld-db
+  type: NodePort
+
+
+kubectl create -f secrets.yml <-- secrets creation
+kubectl create -f database.yml <-- db pod 
+kubectl create -f database-service.yml <-- db service
+kubectl create -f helloworld-db.yml <-- hello app pod
+kubectl create -f helloworld-db-service.yml <-- hello app service
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# kubectl get service
+NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+database-service        NodePort    100.65.88.102   <none>        3306:30197/TCP   12m
+helloworld-db-service   NodePort    100.68.9.62     <none>        3000:31774/TCP   7m
+kubernetes              ClusterIP   100.64.0.1      <none>        443/TCP          2d
+
+
+http://master-url:31774/ <-- working fine.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/service-discovery# kubectl logs helloworld-deployment-54b56f49f4-5bfqx
+Example app listening at http://:::3000
+Connection to db established
+
+To check:
+connect db:
+kubectl exec database -it -- mysql -u root -p rootPassword
+use helloworld
+select * from visits;
+
+
+To check:: 
+kubectl run -i --tty busybox --image=busybox --restart=Never -- sh
+nsllokup service-name
+
+-------------------------------------------
+ConfigMap::
+- Configuration parameters that are not secret, can be put in a ConfigMap.
+- The input iis again key-value pairs.
+- The ConfigMap key-value pairs can then be read by the app using:
+  ~ Environment variables
+  ~ Container commandline arguments in pod configuration
+  ~ Using volumes.
+- A configMap can also contain full configuration files.
+  e.g: an webserver config file
+- This file can then be mounted using volumes where the applicaiton expects its config file.
+- This way you can "inject" configuration settings into containers without changing the container itself.
+To generate configmap using fiels:
+cat <<EOF >app.properties
+driver=jdbc
+dtabase=Postgreslokkandfeel=1
+otherparams=xyz
+param.with.hierarchy=xyz
+EOF
+$ kubectl create configmap app-config --from-file=app.properties
+
+to run ubuntu image in k8s:
+kc run -i -t ubuntu --image=ubuntu
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# kc create configmap nginx-config --from-file=reverseproxy.conf
+configmap/nginx-config created
+
+kc describe configmap nginx-config
+
+kc get configmap nginx-config -o yaml <-- to the data in yaml format.
+
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# cat nginx.yml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: helloworld-nginx
+  labels:
+    app: helloworld-nginx
+spec:
+  containers:
+  - name: nginx <-- container1
+    image: nginx:1.11
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: config-volume
+      mountPath: /etc/nginx/conf.d
+  - name: k8s-demo <-- container1
+    image: wardviaene/k8s-dem2
+    ports:
+    - containerPort: 3000
+  volumes:
+    - name: config-volume <-- this should be same as like above.
+      configMap:
+        name: nginx-config <-- config map name.
+        items:
+        - key: reverseproxy.conf
+          path: reverseproxy.conf
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# cat nginx-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: helloworld-nginx-service
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+  selector:
+    app: helloworld-nginx
+  type: NodePort
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# kc create -f nginx.yml
+pod/helloworld-nginx created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# kc create -f nginx-service.yml
+service/helloworld-nginx-service created
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# kc get service
+NAME                       TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+database-service           NodePort    100.65.88.102   <none>        3306:30197/TCP   3h
+helloworld-db-service      NodePort    100.68.9.62     <none>        3000:31774/TCP   3h
+helloworld-nginx-service   NodePort    100.67.32.224   <none>        80:31596/TCP     4s
+kubernetes                 ClusterIP   100.64.0.1      <none>        443/TCP          3d
+
+http://ec2-52-90-107-103.compute-1.amazonaws.com:31596/ -- worked
+
+
+To validate:
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# kc exec -it helloworld-nginx -- cat /etc/nginx/conf.d/reverseproxy.conf
+Defaulting container name to nginx.
+Use 'kubectl describe pod/helloworld-nginx -n default' to see all of the containers in this pod.
+server {
+    listen       80;
+    server_name  localhost;
+
+    location / {
+        proxy_bind 127.0.0.1;
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}
+
+Or
+connect nginx container:
+kc exec -it helloworld-nginx -c nginx -- bash
+cat  /etc/nginx/conf.d/reverseproxy.conf
+
+
+Also you can check this, access the url using -vvv verbose option with curl, you can see nginx is responding instead of nodejs container.
+This is how we can put nginx infront of application container. We can enable SSL on nginx and redirect to PHP/nodejs/java application.
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/configmap# curl http://ec2-52-90-107-103.compute-1.amazonaws.com:31596/ -vvv
+*   Trying 52.90.107.103...
+* Connected to ec2-52-90-107-103.compute-1.amazonaws.com (52.90.107.103) port 31596 (#0)
+> GET / HTTP/1.1
+> Host: ec2-52-90-107-103.compute-1.amazonaws.com:31596
+> User-Agent: curl/7.47.0
+> Accept: */*
+>
+< HTTP/1.1 200 OK
+< Server: nginx/1.11.13
+< Date: Thu, 09 Aug 2018 13:40:58 GMT
+< Content-Type: text/html; charset=utf-8
+< Content-Length: 12
+< Connection: keep-alive
+< X-Powered-By: Express
+< ETag: W/"c-7Qdih1MuhjZehB6Sv8UNjA"
+<
+* Connection #0 to host ec2-52-90-107-103.compute-1.amazonaws.com left intact
+
+-----------------------------
+Ingress: V>1.1
+- Its an alternative to external Ladbalancer or nodePorts.
+- Ingress allows you to easily expose services that need to be accessible from outside to the cluster
+- With ingress you can run you own ingress controller (basically a laoadbalancer) within the kubernetes cluster.
+- There are a default ingress controllers available, or you can write your own ingress controller.
+
+internet --> ingress controller --> nginx ingress controller(ingress rules to app1 or app2) --> services (app1, app2)
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/ingress# ll
+total 32
+drwxr-xr-x  2 root root 4096 Aug  6 12:12 ./
+drwxr-xr-x 22 root root 4096 Aug  6 12:12 ../
+-rw-r--r--  1 root root  566 Aug  6 12:12 echoservice.yml
+-rw-r--r--  1 root root  563 Aug  6 12:12 helloworld-v1.yml
+-rw-r--r--  1 root root  558 Aug  6 12:12 helloworld-v2.yml
+-rw-r--r--  1 root root  447 Aug  6 12:12 ingress.yml
+-rw-r--r--  1 root root 4745 Aug  6 12:12 nginx-ingress-controller.yml
+root@ip-172-31-88-246:~/subbu/kubernetes-course/ingress# kc create -f ingress.yml
+..all files create.
+
+kc get service
+http://url:80 -- default output.
+curl http://url:80 -H 'Host: helloworld-v1.example.com' -- output from host1.
+curl http://url:80 -H 'Host: helloworld-v2.example.com' -- output from host2.
+
+
+-------------------------------
+Volumes: Run apps with state!
+
+- Vlumes in kubernetes allow you to store data outside the container
+- When a container stops, all data on the container itself is lost.
+  ~ Thats why up til now i have been using statelss apps: appa that don't keep a local state, but stortheir state in an external service.
+  ~ Externa lservices are like a database, caching server (e.g: MySQL, AWS S3)
+- Persistent volumes in kubernetes allow you attach a volume to a container that will exists even when the cotnaier stops.
+Volumes can be attached using the different volume plugins:
+    Pod1  --> Local Volume
+    Pod2  --> NFS 
+    Pod3  --> EBS Storage / Google Disk, Azure Disk...etc.
+- Using volumes,, you could deploy applicaitons with state on your cluster.
+  ~ Those apps need to read/write to files on the local filesystem that need to be persistent in time.
+- YOu could run a MySQL database using persistent volumes.
+- If node stops working, the pod can be rescheduled on another node, and the volume can be attached to the new node automcatically.
+
+      Node1  --- EBS volume  {if Node1 falied, new pod will be created by K8s and start mapping to same EBS from Node2}
+                    ^
+                    |
+                  Node2
+  Thats why its good to have storage outside the node. But both the nodes should be in same AZ.
+
+Demo::
+1. Create a volume withint he same availability zone where the master is running. otherwise it will not work.
+
+root@ip-172-31-88-246:~# aws ec2 create-volume --size 5 --region us-east-1 --availability-zone us-east-1a --volume-type gp2
+{
+    "AvailabilityZone": "us-east-1a",
+    "Tags": [],
+    "Encrypted": false,
+    "VolumeType": "gp2",
+    "VolumeId": "vol-05cffc3605f2e4477",
+    "State": "creating",
+    "Iops": 100,
+    "SnapshotId": "",
+    "CreateTime": "2018-08-10T12:44:32.000Z",
+    "Size": 5
+}
+
+2. Tag the volume with the Name - cluster-name (advith.k8s.local)
+
+root@ip-172-31-88-246:~/subbu/kubernetes-course/volumes# cat helloworld-with-volume.yml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: helloworld-deployment-vol
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: helloworld
+    spec:
+      containers:
+      - name: k8s-demo
+        image: wardviaene/k8s-demo
+        ports:
+        - name: nodejs-port
+          containerPort: 3000
+        volumeMounts:
+        - mountPath: /myvol
+          name: myvolume
+      volumes:
+      - name: myvolume
+        awsElasticBlockStore:
+          volumeID: vol-05cffc3605f2e4477
+
+kc create -f abc.yml
+
+even if you delete pod, deployment will carete a new pod and assign the volume to new pod automcatically. so we will not loose data.
+This is very useful especially for stateful application.
+
+
+-------------------------------
+PetSets::   V.1.3 -- Helps to enable static hostnames, so that you can use that names to enable communication between the hosts.
+  If it is dynamic hostname its not possible.
+
+- It is introduced to be able to run stateful applications that need:
+  ~ A stable pod hostname (instead of podname-renadonstring)
+    ~ your podname will have an index when having multiple instates of the pod (eg: podname-0, podname-1, podname-2)
+  ~ A stateful app that requires multiple pods with volumes based on their ordinal number (podname-x) or hostname.
+  ~ Currnetly deleting and/or scaling a PetSet down will not delete teh columes associated with the PetSet.
+- A pet set will allow your stateful app to use DNS to find other peers.
+  ~ Cassandra clusters, ElasticSearch clusters, use DNS to find other members of the cluster.
+  ~ One running node of your petset is called a Pet. (e.g 1 node in Cassandra)
+  ~ Using Petsets you can run for instance 5 cassandra nodes on kubernetes named cassandra-1 until cassandra-5.
+  ~ If you wouldn't use PetSets, you would get a dynamic hostanme, which you wouldn't be able to use in your configuration files, as the name can be always change.
+- Petset will also allow your stateful app to order your startup and teardown of the pets:
+  ~ Instead of randomly terminating one pet (one instance of your app), you'll know which one that will go
+  ~ This is useful if you first need to drain the data from a node before it can be shutdown.
+
+<<Practice 49 video>>
+
+-------------------------------
+Resouce Usage Monitoring::
+- Heapster enables "container cluster monitoring" and "Performance Analysis".
+- Its providing a monitoring platform for k8s.
+- Its a prerequiste if you want to do pod auto-scaling in k8s.
+- Heapster exports clusters metrics via REST endpoints.
+- You can use different backends with Heapster
+  ~ you can use InfluxDB or Google Cloud Monitoring/Loggin and Kafka are also possible.
+- Visualizations (graphs) can be shown using Grafana.
+  ~ The kubernetes dashboard will also show graphs once monitoring is enabled.
+- All these technologies (Heapster, InfluxDB, and Grafana) can be started in pods
+- The yaml files can be found on the github repository of Heapster.
+  . https://github.com/kubernetes/heapster/tree/master/deploy/kube-config/influxdb 
+  . After downloading the repository the whole platform can be deployed using the addon system of by using kubectl create -f directory-with-yaml-files/
+
+    Node-1              
+      cAdvisor  Kubelet   ------>             Node3
+        POD                                 cAdvisor  Kubelet
+                                                       | 
+    Node-2                                    Heapstor Pod 
+      cAdvisor  Kubelet    ------>                   InfluxDB pod  
+        POD                                   Grafana pod
+
+-- All kubeletes collects node metrics and send to Heapstor pod, then Heapstor pod stores data in InfluxDB and Grafana show that data in graphical ways.
+
+<<Practice 50 video>>
+
+-------------------------
+Autoscaling::
+- Kubernetes has the possibility to automcatically scale pods based on metrics.
+- Kubernetes can automcatically scale a Deployment, Replication Controller or ReplicaSet.
+- In kubernetes 1.3 scaling based on CPU usage is possible out of the box.
+  ~ with application based metrics are also available (like queries per second or average req latency)
+  ~ To enable this, the cluster has to be started with the env var ENABLE_CUSTOM_METRICS to true.
+-Autoscaling will periodically query the utilization for the trageted pods.
+  ~ By default 30 sec, can be chaged using the "--horizontal-pod-autoscaler-syc-period" when launching the controller-manager.
+  ~ Autoscaling will use heapster, the monitoring tool, to gather its metrics and make scaling decisions.
+    ~ Heapster must be installed and running before autoscaling will work.
+An example:
+- You run a deployment wiht a pod with a CPU resource request of 200m
+- 200m = 200 millicpu (or also 200 millicores)
+- 200m = 0.2, which is 20% of a CPU core of the running node.
+  ~ If the node has 2 cores, it's still 20% of a single core
+- You introduce auto-scaling at 50% of the CPU usage (which is 100m)
+- Horizontal Pod autoscaling will increase/decrease pods to maintain a target CPU utilizaiton of 50% (or 100m / 10% of a core within this pod) 
+
+<<practice 53 video>>
+
+
+
+
+================================================================================================
+Resource Quotas::
+- when a kubernetes cluster is used by multiple people or teams, resource management becomes more important.
+  ~ You wnat to be able to manage the resources you give to a person or a team.
+  ~ You dont want one person or team taking up all the resources (e.g. CPU/Memory)of the cluster.
+- you can devide your clusetr in namespaces and enable resource quotas on it.
+  ~ you can do this using the ResourceQuota and ObjectQuota objects.
+-Each container can specify "request capacity" and "capacity limits".
+  ~ Request capacity is an explicit request for resources.
+    ~ The scheduler can use the request capacity to make decions on where to put the pod on
+    ~ you can see it as a minimum amount of resources the pod needs.
+  - Resource limit is a limit imposed to the container.
+    ~ The container will not be able to utilize more resources than specified.
+
+An example:
+- You run a deployment wiht a pod with a CPU resource request of 200m
+- 200m = 200 millicpu (or also 200 millicores)
+- 200m = 0.2, which is 20% of a CPU core of the running node.
+  ~ If the node has 2 cores, it's still 20% of a single core
+- You can also put a limit, e.g 400m
+- Memory quotas are defined by Mb or Gb.
+- If a capacity quota (e.g mem/cpu) has been specified by the administrator, then each pod needs to specify quot during creation.
+  ~ The administrator can specify default request values for pods that don't dpecify any value for capacity.
+  ~ The same is valid for limit quotas.
+- If a resource is requested more than the allowed capacity, the server API will give an error 403 FORBIDDEN - and kubectl will show an error.
+
+- The administrator can set the following resource limits within a namespace:
+    Resource                      Description
+  requests.cpu             The sum of "CPU requests" of all pods can't exceed this value.
+  requests.mem              ....       MEM requests ...
+  requests.storage          ....       storage requests ...
+  limits.cpu                ....      CPU limits ...
+  limits.Memory             ....      MEM limits ...
+
+- The administrator can set the following object limits:
+    Resource                  Description
+  configmaps              total number of "configmaps" that can exist in a namespace.
+  persistantvolumecaims   ... persistent volume claims ...
+  pods                    ... pods ...
+  replicationcontrollers  ... replicationcontrollers ...
+  resourcequotas          ... resource quotas ...
+  services                ... services ...
+  services.LoadBalancer   ... load balancers ...
+  services.nodePorts      ... nodeports ...
+  secrets                 ... secrets ...
+-----------------------------------------------
+Namespaces::
+- Namespaces allow you to create virtual clusters within the same physical cluster.
+- Namespaces logically seperates  your cluster
+- The standard namespace is called "default" and thats  where all resources are launched in by default.
+  ~ There is also namespace for kubernetes specific resources, called kube-system.(DNS, Dashboard, monitoring..etc)
+- Namespace are intended when you have multiple teams / Projects using the kubernetes cluster.
+- The name of resources need to be unique within a namespace, but not across namespaces
+  ~ e.g. you can have the deployment "helloworld" multiple times in different namespaces, but not twice in one namespace.
+- You can divide resources of kubernetes cluster using namespaces
+  ~ You can limit resources on a per namespace basis.
+  ~ e.g. the marketing team can only use max of 10G of memory & 2 LBs, 2 CPUs..etc.
+
+Create new namespace:
+$ kubectl create namespace myspace
+
+you can list namespaces:
+kubectl get namespaces
+if you want to set your namespace as default:
+  1. export CONTEXT=$(kubectl config view | awk '/current-context/{print $2}')
+  2. kubectl config set-context $CONTEXT --namespace=myspace
+- You can then create resource limits within that namespace:
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-resources
+  namespace: myspace
+spect:
+  hard:
+    requests.cpu:"1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+- You can also create object limits:
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-counts
+  namespace: myspace
+spec:
+  hard:
+    configmaps: "10"
+    persistentvolumeclaims: "4"
+    replicationcontrollers: "20"
+    secrets": "10"
+    services: "10"
+    services.loadbalaners: "2"
+
+
+
+
+
+
+
+
